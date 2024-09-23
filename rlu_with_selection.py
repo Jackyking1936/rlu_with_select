@@ -400,7 +400,7 @@ class MainApp(QWidget):
                 if (self.trade_budget <= (self.total_budget-self.used_budget)):
                     if data['isLimitUpPrice']:
                         self.communicator.print_log_signal.emit(data['symbol']+'...送出市價單')
-                        if data['volume'] >= self.volume_threshold:
+                        if data['size'] >= self.volume_threshold:
                             if 'price' in data:
                                 buy_qty = self.trade_budget//(data['price']*1000)*1000
                                 
