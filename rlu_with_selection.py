@@ -58,7 +58,7 @@ class MainApp(QWidget):
         my_icon.addFile('fast_icon.png')
 
         self.setWindowIcon(my_icon)
-        self.setWindowTitle("Python搶漲停程式教學範例")
+        self.setWindowTitle("Python自選清單搶漲停教學範例")
         self.resize(1000, 600)
         
         # 製作上下排列layout上為庫存表，下為log資訊
