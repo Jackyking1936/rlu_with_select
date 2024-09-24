@@ -107,13 +107,21 @@ class MainApp(QWidget):
         label_total_budget_post = QLabel('萬元')
         layout_condition.addWidget(label_total_budget_post, 3, 2)
         
-        label_total_volume = QLabel('單量>=')
+        label_total_volume = QLabel('交易量>=')
         layout_condition.addWidget(label_total_volume, 2, 3)
         self.lineEdit_total_volume = QLineEdit()
         self.lineEdit_total_volume.setText('0')
         layout_condition.addWidget(self.lineEdit_total_volume, 2, 4)
         label_total_volume_post = QLabel('張')
         layout_condition.addWidget(label_total_volume_post, 2, 5)
+
+        label_tick_size = QLabel('單量>=')
+        layout_condition.addWidget(label_tick_size, 3, 3)
+        self.lineEdit_tick_size = QLineEdit()
+        self.lineEdit_tick_size.setText('0')
+        layout_condition.addWidget(self.lineEdit_tick_size, 3, 4)
+        label_tick_size_post = QLabel('張')
+        layout_condition.addWidget(label_tick_size_post, 3, 5)
 
         # 啟動按鈕
         self.button_start = QPushButton('開始洗價')
@@ -199,6 +207,8 @@ class MainApp(QWidget):
         self.used_budget = 0
         self.active_logout = False
         self.fake_price_cnt = 0
+        self.volume_threshold = 0
+        self.size_threshold = 0
 
     def fake_disconnect(self):
         # self.wsstock.disconnect()
@@ -217,10 +227,10 @@ class MainApp(QWidget):
 
     def fake_message(self, stock_no):
         self.price_interval+=1
-        json_template = '''{{"event":"data","data":{{"symbol":"{symbol}","type":"EQUITY","exchange":"TWSE","market":"TSE","price":{price},"size":713,"bid":16.67,"ask":{price}, "isLimitUpAsk":true, "volume":8066,"isClose":true,"time":1718343000000000,"serial":9475857}},"id":"w4mkzAqYAYFKyEBLyEjmHEoNADpwKjUJmqg02G3OC9YmV","channel":"trades"}}'''
+        json_template = '''{{"event":"data","data":{{"symbol":"{symbol}","type":"EQUITY","exchange":"TWSE","market":"TSE","price":{price},"size":213,"bid":16.67,"ask":{price}, "isLimitUpAsk":true, "volume":8066,"isClose":true,"time":1718343000000000,"serial":9475857}},"id":"w4mkzAqYAYFKyEBLyEjmHEoNADpwKjUJmqg02G3OC9YmV","channel":"trades"}}'''
         json_price = 15+self.price_interval
         if json_price >= 20:
-            json_template = '''{{"event":"data","data":{{"symbol":"{symbol}","type":"EQUITY","exchange":"TWSE","market":"TSE","price":{price},"size":713,"bid":16.67,"ask":{price}, "isLimitUpPrice":true, "volume":500,"isClose":true,"time":1718343000000000,"serial":9475857}},"id":"w4mkzAqYAYFKyEBLyEjmHEoNADpwKjUJmqg02G3OC9YmV","channel":"trades"}}'''
+            json_template = '''{{"event":"data","data":{{"symbol":"{symbol}","type":"EQUITY","exchange":"TWSE","market":"TSE","price":{price},"size":213,"bid":16.67,"ask":{price}, "isLimitUpPrice":true, "volume":500,"isClose":true,"time":1718343000000000,"serial":9475857}},"id":"w4mkzAqYAYFKyEBLyEjmHEoNADpwKjUJmqg02G3OC9YmV","channel":"trades"}}'''
         json_str = json_template.format(symbol=stock_no, price=str(json_price))
         self.handle_message(json_str)
 
@@ -400,23 +410,27 @@ class MainApp(QWidget):
                 if (self.trade_budget <= (self.total_budget-self.used_budget)):
                     if data['isLimitUpPrice']:
                         self.communicator.print_log_signal.emit(data['symbol']+'...送出市價單')
-                        if data['size'] >= self.volume_threshold:
-                            if 'price' in data:
-                                buy_qty = self.trade_budget//(data['price']*1000)*1000
-                                
-                            if buy_qty <= 0:
-                                self.communicator.print_log_signal.emit(data['symbol']+'...額度不足購買1張')
-                            else:
-                                self.communicator.print_log_signal.emit(data['symbol']+'...委託'+str(buy_qty)+'股')
-                                order_res = self.buy_market_order(data['symbol'], buy_qty, self.order_tag)
-                                if order_res.is_success:
-                                    self.communicator.print_log_signal.emit(data['symbol']+"...市價單發送成功，單號: "+order_res.data.order_no)
-                                    self.is_ordered[data['symbol']] = buy_qty
-                                    self.used_budget+=buy_qty*data['price']
-                                    self.communicator.order_qty_update.emit(data['symbol'], buy_qty)
+                        if data['volume'] >= self.volume_threshold:
+                            if data['size'] >= self.size_threshold:
+                                print(data['size'], self.size_threshold)
+                                if 'price' in data:
+                                    buy_qty = self.trade_budget//(data['price']*1000)*1000
+                                    
+                                if buy_qty <= 0:
+                                    self.communicator.print_log_signal.emit(data['symbol']+'...額度不足購買1張')
                                 else:
-                                    self.communicator.print_log_signal.emit(data['symbol']+"...市價單發送失敗...")
-                                    self.communicator.print_log_signal.emit(order_res.message)
+                                    self.communicator.print_log_signal.emit(data['symbol']+'...委託'+str(buy_qty)+'股')
+                                    order_res = self.buy_market_order(data['symbol'], buy_qty, self.order_tag)
+                                    if order_res.is_success:
+                                        self.communicator.print_log_signal.emit(data['symbol']+"...市價單發送成功，單號: "+order_res.data.order_no)
+                                        self.is_ordered[data['symbol']] = buy_qty
+                                        self.used_budget+=buy_qty*data['price']
+                                        self.communicator.order_qty_update.emit(data['symbol'], buy_qty)
+                                    else:
+                                        self.communicator.print_log_signal.emit(data['symbol']+"...市價單發送失敗...")
+                                        self.communicator.print_log_signal.emit(order_res.message)
+                            else:
+                                self.communicator.print_log_signal.emit(data['symbol']+"...tick單量不足，市價單發送失敗...")
                         else:
                             self.communicator.print_log_signal.emit(data['symbol']+"...交易量不足，市價單發送失敗...")
                 else:
@@ -465,6 +479,15 @@ class MainApp(QWidget):
         try:
             self.volume_threshold = int(self.lineEdit_total_volume.text())
             if self.volume_threshold<0:
+                self.print_log("請輸入正確的交易量門檻(張), 整數, 必須大於等於0")
+                return
+        except Exception as e:
+            self.print_log("請輸入正確的交易量門檻(張), "+str(e))
+            return
+        
+        try:
+            self.size_threshold = int(self.lineEdit_tick_size.text())
+            if self.size_threshold<0:
                 self.print_log("請輸入正確的單量門檻(張), 整數, 必須大於等於0")
                 return
         except Exception as e:
@@ -475,6 +498,7 @@ class MainApp(QWidget):
         self.lineEdit_trade_budget.setReadOnly(True)
         self.lineEdit_total_budget.setReadOnly(True)
         self.lineEdit_total_volume.setReadOnly(True)
+        self.lineEdit_tick_size.setReadOnly(True)
         self.button_start.setVisible(False)
         self.button_stop.setVisible(True)
         self.folder_btn.setEnabled(False)
@@ -508,6 +532,7 @@ class MainApp(QWidget):
         self.lineEdit_trade_budget.setReadOnly(False)
         self.lineEdit_total_budget.setReadOnly(False)
         self.lineEdit_total_volume.setReadOnly(False)
+        self.lineEdit_tick_size.setReadOnly(False)
         self.button_stop.setVisible(False)
         self.button_start.setVisible(True)
         self.folder_btn.setEnabled(True)
